@@ -276,6 +276,9 @@ class KFACLinearOperator(CurvatureLinearOperator):
         self._input_covariances: Dict[str, Tensor] = {}
         self._gradient_covariances: Dict[str, Tensor] = {}
         self._matrix_dtype = matrix_dtype
+        self._matrix_device = matrix_device
+        # Assert its a cuda device
+        assert self._matrix_device.type == "cuda", "Matrix device must be a CUDA device otherwise non-blocking transfers cause undefined behavior"
         self._mapping = self.compute_parameter_mapping(params, model_func)
 
         # Properties of the full matrix KFAC approximation are initialized to `None`
@@ -738,6 +741,8 @@ class KFACLinearOperator(CurvatureLinearOperator):
             module_name: The name of the layer in the neural network.
         """
         g = grad_output.data.detach()
+        g = g.to(dtype=self._matrix_dtype, device=self._matrix_device, non_blocking=True)
+
         batch_size = g.shape[0]
         if isinstance(module, Conv2d):
             g = rearrange(g, "batch c o1 o2 -> batch o1 o2 c")
@@ -784,6 +789,7 @@ class KFACLinearOperator(CurvatureLinearOperator):
         if len(inputs) != 1:
             raise ValueError("Modules with multiple inputs are not supported.")
         x = inputs[0].data.detach()
+        x = x.to(dtype=self._matrix_dtype, device=self._matrix_device, non_blocking=True)
 
         if isinstance(module, Conv2d):
             patch_extractor_fn = {
@@ -816,8 +822,6 @@ class KFACLinearOperator(CurvatureLinearOperator):
         ):
             x = cat([x, x.new_ones(x.shape[0], 1)], dim=1)
 
-        if self._matrix_dtype is not None:
-            x = x.to(self._matrix_dtype)
 
         covariance = einsum(x, x, "b i,b j -> i j").div_(self._N_data * scale)
         self._input_covariances = self._set_or_add_(

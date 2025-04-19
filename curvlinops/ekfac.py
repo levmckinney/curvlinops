@@ -7,7 +7,7 @@ from functools import partial
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from einops import einsum, rearrange
-from torch import Generator, Tensor, cat, dtype
+from torch import Generator, Tensor, cat, device, dtype
 from torch.linalg import eigh
 from torch.nn import (
     BCEWithLogitsLoss,
@@ -69,6 +69,7 @@ class EKFACLinearOperator(KFACLinearOperator):
         num_data: Optional[int] = None,
         batch_size_fn: Optional[Callable[[MutableMapping], int]] = None,
         matrix_dtype: Optional[dtype] = None,
+        matrix_device: Optional[device] = None,
     ):
         """Eigenvalue-corrected KFAC (EKFAC) proxy of the Fisher/GGN.
 
@@ -136,6 +137,8 @@ class EKFACLinearOperator(KFACLinearOperator):
                 entry of the iterates from ``data`` and return their batch size.
             matrix_dtype: The dtype of the matrices in the EKFAC approximation.
                 Defaults to the dtype of the parameters.
+            matrix_device: The device of the matrices in the EKFAC approximation.
+                Defaults to the device of the parameters.
         """
         super().__init__(
             model_func=model_func,
@@ -153,6 +156,7 @@ class EKFACLinearOperator(KFACLinearOperator):
             num_data=num_data,
             batch_size_fn=batch_size_fn,
             matrix_dtype=matrix_dtype,
+            matrix_device=matrix_device,
         )
 
         # Initialize the eigenvectors of the Kronecker factors
@@ -402,7 +406,7 @@ class EKFACLinearOperator(KFACLinearOperator):
             module: The layer for which corrected eigenvalues will be accumulated.
             module_name: The name of the layer in the neural network.
         """
-        g = grad_output.data.detach().to(self._matrix_dtype)
+        g = grad_output.data.detach().to(dtype=self._matrix_dtype, device=self._matrix_device, non_blocking=True)
         batch_size = g.shape[0]
         if isinstance(module, Conv2d):
             g = rearrange(g, "batch c o1 o2 -> batch o1 o2 c")
