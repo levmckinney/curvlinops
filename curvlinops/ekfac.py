@@ -355,7 +355,7 @@ class EKFACLinearOperator(KFACLinearOperator):
         """
         if len(inputs) != 1:
             raise ValueError("Modules with multiple inputs are not supported.")
-        self._cached_activations[module_name] = inputs[0].data.detach().to(self._matrix_dtype)
+        self._cached_activations[module_name] = inputs[0].data.detach().to(dtype=self._matrix_dtype, device=self._matrix_device, non_blocking=True)
 
     def _register_tensor_hook_on_output_to_accumulate_corrected_eigenvalues(
         self, module: Module, inputs: Tuple[Tensor], output: Tensor, module_name: str

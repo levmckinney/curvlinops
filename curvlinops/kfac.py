@@ -25,7 +25,7 @@ from math import sqrt
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar, Union
 
 from einops import einsum, rearrange, reduce
-from torch import Generator, Tensor, cat, eye, randn, stack, dtype
+from torch import Generator, Tensor, cat, eye, randn, stack, dtype, device
 from torch.autograd import grad
 from torch.nn import (
     BCEWithLogitsLoss,
@@ -171,6 +171,7 @@ class KFACLinearOperator(CurvatureLinearOperator):
         num_data: Optional[int] = None,
         batch_size_fn: Optional[Callable[[Union[MutableMapping, Tensor]], int]] = None,
         matrix_dtype: Optional[dtype] = None,
+        matrix_device: Optional[device] = None,
     ):
         """Kronecker-factored approximate curvature (KFAC) proxy of the Fisher/GGN.
 
@@ -241,6 +242,8 @@ class KFACLinearOperator(CurvatureLinearOperator):
                 entry of the iterates from ``data`` and return their batch size.
             matrix_dtype: The dtype of the Kronecker factors. Defaults to the dtype of
                 the models activations.
+            matrix_device: The device of the Kronecker factors. Defaults to the device
+                of the model's activations.
 
         Raises:
             ValueError: If the loss function is not supported.
@@ -278,7 +281,7 @@ class KFACLinearOperator(CurvatureLinearOperator):
         self._matrix_dtype = matrix_dtype
         self._matrix_device = matrix_device
         # Assert its a cuda device
-        assert self._matrix_device.type == "cuda", "Matrix device must be a CUDA device otherwise non-blocking transfers cause undefined behavior"
+        assert self._matrix_device is None or self._matrix_device.type == "cuda", "Matrix device must be a CUDA device otherwise non-blocking transfers cause undefined behavior"
         self._mapping = self.compute_parameter_mapping(params, model_func)
 
         # Properties of the full matrix KFAC approximation are initialized to `None`
