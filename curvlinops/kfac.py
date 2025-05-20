@@ -366,6 +366,9 @@ class KFACLinearOperator(CurvatureLinearOperator):
         Returns:
             Matrix-multiplication result.
         """
+        # Send x to covariance device
+        original_device = M.device
+        M = M.to(device=aaT.device)
         if eigenvalues is None:
             M = einsum(ggT, M, aaT, "i j, j k v, k l -> i l v")
         else:
@@ -379,6 +382,8 @@ class KFACLinearOperator(CurvatureLinearOperator):
             M.mul_(eigenvalues.unsqueeze(-1))
             # Transform back to standard basis.
             M = einsum(ggT_eigvecs, M, aaT_eigvecs, "i j, j k v, l k -> i l v")
+        # Send M back to original device
+        M = M.to(device=original_device)
         return M
 
     @staticmethod
@@ -389,7 +394,7 @@ class KFACLinearOperator(CurvatureLinearOperator):
         aaT: FactorType,
         ggT: FactorType,
         eigenvalues: Optional[List[Tensor]] = None,
-    ) -> Tensor:
+    ) -> None:
         """Multiply matrix with Kronecker factors for separated weight and bias.
 
         Args:
@@ -406,12 +411,14 @@ class KFACLinearOperator(CurvatureLinearOperator):
         for p_name, pos in param_pos.items():
             # for weights we need to multiply from the right with aaT
             # for weights and biases we need to multiply from the left with ggT
+            original_device = M[pos].device
+            M_pos = M[pos].to(device=aaT.device)
             if p_name == "weight":
-                M_w = rearrange(M[pos], "c_out ... v -> c_out (...) v")
+                M_w = rearrange(M_pos, "c_out ... v -> c_out (...) v")
                 # If `eigenvalues` is not `None`, we transform to eigenbasis here
                 KM[pos] = einsum(M_w, aaT, "c_out j v, j k -> c_out k v")
             else:
-                KM[pos] = M[pos]
+                KM[pos] = M_pos
 
             # If `eigenvalues` is not `None`, we convert to eigenbasis here
             KM[pos] = einsum(
@@ -424,6 +431,8 @@ class KFACLinearOperator(CurvatureLinearOperator):
                 if p_name == "weight":
                     KM[pos] = einsum(KM[pos], aaT, "c_out j v, k j -> c_out k v")
                 KM[pos] = einsum(ggT, KM[pos], "j k, k ... v -> j ... v")
+
+            KM[pos] = KM[pos].to(device=original_device)
 
     def _matmat(self, M: List[Tensor]) -> List[Tensor]:
         """Apply KFAC to a matrix (multiple vectors) in tensor list format.
